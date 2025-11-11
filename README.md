@@ -137,6 +137,24 @@ cp .env.example .env
 python -m chatbot.rag_chatbot
 ```
 
+### Testing Your Setup
+
+Before starting the interview, verify your environment is ready:
+
+```bash
+python test_setup.py
+```
+
+### Testing Locally
+
+To test the knowledge graph workflow locally without pushing to GitHub:
+
+```bash
+python run_local_workflow.py
+```
+
+This will generate `knowledge_graph.json` and `knowledge_graph_visualization.png` locally.
+
 ## Evaluation Criteria
 
 ### Task 1 (GitHub Actions Workflow)
