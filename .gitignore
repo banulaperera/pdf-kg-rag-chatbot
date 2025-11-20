@@ -216,3 +216,4 @@ knowledge_graph_visualization.png
 
 # Temporary build scripts
 build_knowledge_graph.py
+.DS_Store
