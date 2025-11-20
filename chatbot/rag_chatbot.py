@@ -18,6 +18,7 @@ import os
 import sys
 import json
 import re
+import warnings
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple, Set
 from dataclasses import dataclass
@@ -25,12 +26,20 @@ from collections import defaultdict
 from datetime import datetime
 import logging
 
+# Suppress warnings
+warnings.filterwarnings('ignore', message='.*urllib3 v2 only supports OpenSSL.*')
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='langchain')
+os.environ['ANONYMIZED_TELEMETRY'] = 'False'
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Suppress ChromaDB telemetry logs
+logging.getLogger('chromadb.telemetry.product.posthog').setLevel(logging.WARNING)
 
 try:
     from dotenv import load_dotenv
@@ -44,7 +53,7 @@ try:
         TextLoader
     )
     from langchain.schema import Document
-    from langchain_community.vectorstores import Chroma
+    from langchain_chroma import Chroma
     from langchain_openai import OpenAIEmbeddings, ChatOpenAI
     from langchain.chains import RetrievalQA, ConversationalRetrievalChain
     from langchain.prompts import PromptTemplate
@@ -78,8 +87,8 @@ class ChatResponse:
     metadata: Dict = None
 
 
-class AdvancedChunker:
-    """Advanced text chunking strategies"""
+class Chunker:
+    """Text chunking strategies"""
 
     @staticmethod
     def sentence_aware_split(text: str, chunk_size: int = 500, overlap: int = 100) -> List[str]:
@@ -170,36 +179,62 @@ class AdvancedChunker:
 class KnowledgeGraphIntegration:
     """Integration with the knowledge graph"""
 
-    def __init__(self, graph_path: str = "../knowledge_graph.json"):
+    def __init__(self, graph_path: Optional[str] = None):
         self.graph = None
         self.doc_topics = defaultdict(list)
         self.entity_docs = defaultdict(set)
+        if graph_path is None:
+            graph_path = Path(__file__).parent.parent / "knowledge_graph.json"
         self.load_graph(graph_path)
 
     def load_graph(self, graph_path: str):
-        """Load the knowledge graph from JSON"""
-        if not Path(graph_path).exists():
-            logger.warning(f"Knowledge graph not found at {graph_path}")
+        """Load the knowledge graph from JSON (supports 'edges' or 'links' formats)"""
+        gp = Path(graph_path)
+        if not gp.exists():
+            logger.warning(f"Knowledge graph not found at {gp}")
             return
 
         try:
-            with open(graph_path) as f:
+            with open(gp) as f:
                 data = json.load(f)
 
-            self.graph = nx.node_link_graph(data)
+            # Determine format
+            if 'links' in data and 'nodes' in data:
+                # Standard node-link format
+                self.graph = nx.node_link_graph(data)
+            else:
+                # Fallback: expect 'nodes' + 'edges'
+                self.graph = nx.Graph()
+                nodes = data.get('nodes', [])
+                for n in nodes:
+                    node_id = n.get('id') or n.get('name') or n.get('label')
+                    if node_id is None:
+                        continue
+                    attrs = {k: v for k, v in n.items() if k not in ('id', 'name')}
+                    self.graph.add_node(node_id, **attrs)
 
-            # Build lookup indices
-            for edge in data.get('edges', []):
-                source = edge['source']
-                target = edge['target']
+                for e in data.get('edges', []):
+                    src = e.get('source')
+                    tgt = e.get('target')
+                    if src is None or tgt is None:
+                        continue
+                    attrs = {k: v for k, v in e.items() if k not in ('source', 'target')}
+                    self.graph.add_edge(src, tgt, **attrs)
+
+            # Build lookup indices (works with either format)
+            self.doc_topics.clear()
+            self.entity_docs.clear()
+            edge_iter = data.get('edges') or data.get('links') or []
+            for edge in edge_iter:
+                source = edge.get('source')
+                target = edge.get('target')
                 relation = edge.get('relation', '')
-
-                if relation == 'discusses':
+                if relation == 'discusses' and source and target:
                     self.doc_topics[source].append(target)
-                elif relation == 'mentions':
+                elif relation == 'mentions' and source and target:
                     self.entity_docs[target].add(source)
 
-            logger.info(f"Loaded knowledge graph with {len(self.graph.nodes())} nodes and {len(self.graph.edges())} edges")
+            logger.info(f"Loaded knowledge graph with {self.graph.number_of_nodes()} nodes and {self.graph.number_of_edges()} edges")
         except Exception as e:
             logger.error(f"Error loading knowledge graph: {e}")
 
@@ -234,8 +269,8 @@ class KnowledgeGraphIntegration:
         return expanded[:5]  # Limit to 5 expanded terms
 
 
-class EnhancedRAGChatbot:
-    """Enhanced RAG Chatbot with advanced features"""
+class RAGChatbot:
+    """RAG Chatbot with advanced features"""
 
     def __init__(
         self,
@@ -263,7 +298,7 @@ class EnhancedRAGChatbot:
         self.qa_chain = None
         self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
         self.kg_integration = KnowledgeGraphIntegration()
-        self.chunker = AdvancedChunker()
+        self.chunker = Chunker()
 
         logger.info(f"Initialized chatbot with {chunking_strategy} chunking strategy")
 
@@ -416,12 +451,20 @@ Question: {question}
 Answer: """.replace("{system_prompt}", system_prompt)
         )
 
+        # Create memory with output_key specified
+        memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True,
+            output_key="answer"  # Specify which output to store in memory
+        )
+        self.memory = memory
+
         self.qa_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
             retriever=self.vector_store.as_retriever(
                 search_kwargs={"k": 5}  # Retrieve top 5 most relevant chunks
             ),
-            memory=self.memory,
+            memory=memory,
             return_source_documents=True,
             verbose=True
         )
@@ -653,7 +696,7 @@ def main():
 
     try:
         # Initialize chatbot
-        chatbot = EnhancedRAGChatbot(
+        chatbot = RAGChatbot(
             documents_dir="pdfs",
             chunking_strategy="hybrid",
             chunk_size=500,
