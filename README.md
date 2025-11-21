@@ -1,200 +1,141 @@
-# Engineer Interview - PDF Knowledge Graph & RAG Chatbot
+# PDF Knowledge Graph & RAG Chatbot
 
-Welcome to the Standard Seed Corporation Engineer Interview! This repository contains a practical coding challenge to assess your skills in data processing, knowledge graph creation, and building RAG (Retrieval Augmented Generation) systems with LangChain.
+This repository implements two tasks:
+1. Task 1: Build a knowledge graph from PDF documents via a GitHub Actions workflow.
+2. Task 2: Integrate the generated knowledge graph into a Retrieval Augmented Generation (RAG) chatbot.
 
 ## Overview
 
-This interview consists of two main tasks:
-
-1. **Task 1**: Create a GitHub Actions workflow to organize PDFs into a knowledge graph
-2. **Task 2**: Build a chatbot system with RAG on the provided PDFs using LangChain
+Implemented components:
+- `run_local_workflow.py`: Extracts text, metadata, entities, topics, builds a NetworkX graph, saves `knowledge_graph.json` (node-link format) and `knowledge_graph_visualization.png`.
+- `.github/workflows/run_knowledge_graph.yml`: CI workflow that triggers on PDF or script changes, runs the builder, uploads artifacts, and optionally commits updates.
+- `chatbot/knowledge_graph.py`: Loads the JSON graph (supports `links` format) and prepares mappings for integration.
+- `chatbot/rag_chatbot.py`: RAG chatbot referencing vector store + (optional) knowledge graph lookups.
 
 ## Repository Structure
 
 ```
 Engineer-Interview/
-├── pdfs/                           # Directory containing sample PDF documents
-│   ├── machine_learning_basics.txt
-│   ├── natural_language_processing.txt
-│   ├── deep_learning.txt
-│   ├── data_science_fundamentals.txt
-│   └── python_programming.txt
+├── pdfs/                            # Provide your PDF files here
+├── run_local_workflow.py            # Knowledge graph builder script
+├── knowledge_graph.json             # Generated graph (after running builder)
+├── knowledge_graph_visualization.png# Generated PNG visualization
+├── chatbot/
+│   ├── __init__.py
+│   ├── rag_chatbot.py               # Chatbot implementation (RAG)
+│   ├── knowledge_graph.py           # Knowledge graph loader
 ├── .github/
 │   └── workflows/
-│       └── organize_pdfs.yml       # TODO: Create this workflow (Task 1)
-├── chatbot/                        # TODO: Create this directory (Task 2)
-│   ├── __init__.py
-│   ├── rag_chatbot.py             # Main chatbot implementation
-│   ├── knowledge_graph.py          # Knowledge graph utilities
-│   └── requirements.txt            # Python dependencies
-├── requirements.txt                # Project-level dependencies
-├── .env.example                    # Environment variables template
-└── README.md                       # This file
+│       └── run_knowledge_graph.yml  # GitHub Actions workflow (Task 1)
+├── requirements.txt                 # Dependencies
+├── solution.md                      # Filled solution documentation
+├── SOLUTION_TEMPLATE.md             # Original template
+├── .env.example
+└── README.md
 ```
 
-## Task 1: GitHub Actions Workflow for PDF Organization
+## Task 1: Knowledge Graph Workflow
 
-### Objective
-Create a GitHub Actions workflow that processes the PDFs in the `pdfs/` directory and organizes them into a knowledge graph.
+### What It Does
+- Scans `./pdfs` for `.pdf` files.
+- Extracts text (pypdf), heuristics-based metadata (authors, institutions, year).
+- Derives topics and entities via regex and frequency filtering.
+- Builds a graph with node types: document, author, institution, topic, entity.
+- Saves:
+  - `knowledge_graph.json` (node-link, includes `document_data`)
+  - `knowledge_graph_visualization.png` (spring layout, colored by type, black labels)
+  - `knowledge_graph_degree_hist.png` 
+  - `knowledge_graph_doc_topic_matrix.png` 
+  - `knowledge_graph_enhanced.png` 
 
-### Requirements
-
-1. The workflow should trigger on:
-   - Push to main branch (when PDFs are added/modified)
-   - Manual workflow dispatch
-   
-2. The workflow should:
-   - Read all PDF/text files from the `pdfs/` directory
-   - Extract key information (topics, entities, relationships)
-   - Build a knowledge graph structure
-   - Save the knowledge graph as a JSON file in the repository
-   - Create visualizations of the knowledge graph
-   
-3. Expected outputs:
-   - `knowledge_graph.json` - Structured representation of the knowledge graph
-   - `knowledge_graph_visualization.png` - Visual representation of the graph
-   - GitHub Actions summary with statistics
-
-### Hints
-- Use Python with libraries like `PyPDF2`, `pdfplumber`, or `pypdf` for PDF processing
-- Use `networkx` for building the knowledge graph
-- Use `matplotlib` or `graphviz` for visualization
-- Consider using NLP libraries like `spaCy` or `nltk` for entity extraction
-
-## Task 2: RAG Chatbot System
-
-### Objective
-Build a chatbot system that uses Retrieval Augmented Generation (RAG) to answer questions based on the content of the PDFs.
-
-### Requirements
-
-1. **Document Processing**:
-   - Load and parse all documents from the `pdfs/` directory
-   - Split documents into manageable chunks
-   - Create embeddings for the text chunks
-   - Store embeddings in a vector database
-
-2. **RAG Implementation**:
-   - Use LangChain for the RAG pipeline
-   - Implement semantic search to retrieve relevant chunks
-   - Use an LLM to generate answers based on retrieved context
-   - Include source citations in responses
-
-3. **Chatbot Interface**:
-   - Create a simple command-line interface or web interface
-   - Allow users to ask questions about the documents
-   - Display relevant answers with source references
-   - Handle follow-up questions
-
-4. **Code Quality**:
-   - Well-structured, modular code
-   - Proper error handling
-   - Documentation and comments
-   - Type hints where appropriate
-
-### Hints
-- Use LangChain's document loaders and text splitters
-- Consider using FAISS or ChromaDB for vector storage
-- Use OpenAI API, Anthropic, or local models (Ollama) for the LLM
-- Implement proper error handling for API calls
-- Consider adding conversation memory for follow-up questions
-
-## Setup Instructions
-
-### Prerequisites
-- Python 3.8 or higher
-- Git
-- API key for your chosen LLM provider (OpenAI, Anthropic, etc.) or Ollama installed locally
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/Standard-Seed-Corporation/Engineer-Interview.git
-cd Engineer-Interview
-```
-
-2. Create a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env and add your API keys
-```
-
-### Running the Chatbot
-
-```bash
-python -m chatbot.rag_chatbot
-```
-
-### Testing Your Setup
-
-Before starting the interview, verify your environment is ready:
-
-```bash
-python test_setup.py
-```
-
-### Testing Locally
-
-To test the knowledge graph workflow locally without pushing to GitHub:
+### Run Locally
 
 ```bash
 python run_local_workflow.py
 ```
 
-This will generate `knowledge_graph.json` and `knowledge_graph_visualization.png` locally.
+### GitHub Actions
 
-## Evaluation Criteria
+Workflow: `.github/workflows/run_knowledge_graph.yml`
+Triggers:
+- Push/PR affecting `pdfs/**` or `run_local_workflow.py`
+- Manual `workflow_dispatch`
+Outputs: artifacts + optional commit of JSON/PNG.
 
-### Task 1 (GitHub Actions Workflow)
-- ✅ Workflow correctly processes PDFs
-- ✅ Knowledge graph is well-structured
-- ✅ Visualization is clear and informative
-- ✅ Workflow is efficient and follows best practices
-- ✅ Code is clean and maintainable
+## Task 2: RAG Chatbot
 
-### Task 2 (RAG Chatbot)
-- ✅ Correctly implements RAG pattern
-- ✅ Accurate retrieval of relevant information
-- ✅ High-quality generated responses
-- ✅ Good user experience
-- ✅ Code quality and architecture
-- ✅ Error handling and edge cases
-- ✅ Documentation
+### Pipeline
+- Load PDFs (LangChain loader produces one page per document chunk).
+- Split text (character splitter with overlap).
+- Generate embeddings (OpenAI).
+- Store in Chroma vector store (`langchain-chroma`).
+- Retrieve top-k chunks per query.
+- Generate answer with ChatOpenAI (sources + structured formatting).
+- Optional: Use knowledge graph mappings (`doc_topics`, `entity_docs`) to enrich responses.
 
-## Submission Guidelines
+### Run Chatbot
 
-1. Fork this repository
-2. Implement both tasks
-3. Test your implementation thoroughly
-4. Create a pull request with your solution
-5. Include a brief writeup explaining your approach and any design decisions
+```bash
+export OPENAI_API_KEY=sk-...
+python -m chatbot.rag_chatbot
+```
 
-## Time Estimate
+## Requirements
 
-- Task 1: 2-3 hours
-- Task 2: 3-4 hours
-- Total: 5-7 hours
+Install:
 
-## Questions?
+```bash
+pip install -r requirements.txt
+```
 
-If you have any questions about the requirements, please create an issue in this repository.
+Ensure system Graphviz installed if using pygraphviz (optional visualization enhancements):
+```bash
+brew install graphviz   # macOS
+```
+
+## Files Generated
+
+- `knowledge_graph.json`
+- `knowledge_graph_visualization.png`
+- `knowledge_graph_degree_hist.png` 
+- `knowledge_graph_doc_topic_matrix.png` 
+- `knowledge_graph_enhanced.png` 
+
+## Environment Setup
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+cp .env.example .env
+# add OPENAI_API_KEY to .env
+pip install -r requirements.txt
+```
+
+## Notes
+
+- PDF page-level extraction allows granular chunk retrieval.
+- Authors/institutions use regex heuristics (may miss edge cases).
+- Graph JSON includes `links` (standard NetworkX node-link) + `document_data`.
+- Labels rendered with black font for readability.
+
+## Future Enhancements (Suggested)
+
+- Add spaCy for NER to improve entity quality.
+- Integrate KG signals into retrieval score re-ranking.
+- Provide interactive graph exploration (e.g. pyvis).
+
+## Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| Knowledge graph path warning | Ensure `knowledge_graph.json` exists after running builder |
+| Missing PyPDF | `pip install pypdf` |
+| Chroma telemetry logs | Set `ANONYMIZED_TELEMETRY=False` |
+| OpenSSL warning (macOS) | Safe to ignore or suppress via `warnings.filterwarnings` |
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License.
 
 ---
-
-Good luck! We're excited to see your solution! 🚀
+Good luck refining and extending the system.
