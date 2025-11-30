@@ -5,159 +5,106 @@ Load and interact with the knowledge graph created by the GitHub Actions workflo
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import List, Optional, Set
 import networkx as nx
+from collections import defaultdict
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
-class KnowledgeGraphLoader:
-    """Load and query the knowledge graph"""
-    
-    def __init__(self, graph_path: str = "knowledge_graph.json"):
-        """
-        Initialize the knowledge graph loader.
-        
-        Args:
-            graph_path: Path to the knowledge graph JSON file
-        """
-        self.graph_path = Path(graph_path)
-        self.graph_data: Optional[Dict] = None
-        self.nx_graph: Optional[nx.Graph] = None
-        
-    def load(self) -> bool:
-        """
-        Load the knowledge graph from JSON file.
-        
-        Returns:
-            True if loaded successfully, False otherwise
-        """
+class KnowledgeGraphIntegration:
+    """Integration with the knowledge graph"""
+
+    def __init__(self, graph_path: Optional[str] = None):
+        self.graph = None
+        self.doc_topics = defaultdict(list)
+        self.entity_docs = defaultdict(set)
+        if graph_path is None:
+            graph_path = Path(__file__).parent.parent / "knowledge_graph.json"
+        self.load_graph(graph_path)
+
+    def load_graph(self, graph_path: str):
+        """Load the knowledge graph from JSON (supports 'edges' or 'links' formats)"""
+        gp = Path(graph_path)
+        if not gp.exists():
+            logger.warning(f"Knowledge graph not found at {gp}")
+            return
+
         try:
-            if not self.graph_path.exists():
-                print(f"Warning: Knowledge graph not found at {self.graph_path}")
-                return False
-                
-            with open(self.graph_path, 'r') as f:
-                self.graph_data = json.load(f)
-            
-            # Rebuild NetworkX graph
-            self.nx_graph = nx.Graph()
-            
-            for node in self.graph_data.get('nodes', []):
-                node_id = node['id']
-                self.nx_graph.add_node(node_id, **{k: v for k, v in node.items() if k != 'id'})
-            
-            for edge in self.graph_data.get('edges', []):
-                source = edge['source']
-                target = edge['target']
-                edge_data = {k: v for k, v in edge.items() if k not in ['source', 'target']}
-                self.nx_graph.add_edge(source, target, **edge_data)
-            
-            print(f"Loaded knowledge graph with {len(self.graph_data['nodes'])} nodes and {len(self.graph_data['edges'])} edges")
-            return True
-            
+            with open(gp) as f:
+                data = json.load(f)
+
+            # Determine format
+            if 'links' in data and 'nodes' in data:
+                # Standard node-link format
+                self.graph = nx.node_link_graph(data)
+            else:
+                # Fallback: expect 'nodes' + 'edges'
+                self.graph = nx.Graph()
+                nodes = data.get('nodes', [])
+                for n in nodes:
+                    node_id = n.get('id') or n.get('name') or n.get('label')
+                    if node_id is None:
+                        continue
+                    attrs = {k: v for k, v in n.items() if k not in ('id', 'name')}
+                    self.graph.add_node(node_id, **attrs)
+
+                for e in data.get('edges', []):
+                    src = e.get('source')
+                    tgt = e.get('target')
+                    if src is None or tgt is None:
+                        continue
+                    attrs = {k: v for k, v in e.items() if k not in ('source', 'target')}
+                    self.graph.add_edge(src, tgt, **attrs)
+
+            # Build lookup indices (works with either format)
+            self.doc_topics.clear()
+            self.entity_docs.clear()
+            edge_iter = data.get('edges') or data.get('links') or []
+            for edge in edge_iter:
+                source = edge.get('source')
+                target = edge.get('target')
+                relation = edge.get('relation', '')
+                if relation == 'discusses' and source and target:
+                    self.doc_topics[source].append(target)
+                elif relation == 'mentions' and source and target:
+                    self.entity_docs[target].add(source)
+
+            logger.info(f"Loaded knowledge graph with {self.graph.number_of_nodes()} nodes and {self.graph.number_of_edges()} edges")
         except Exception as e:
-            print(f"Error loading knowledge graph: {e}")
-            return False
-    
-    def get_documents(self) -> List[str]:
-        """Get list of all document names in the knowledge graph"""
-        if not self.graph_data:
-            return []
-        return list(self.graph_data.get('documents', {}).keys())
-    
-    def get_document_info(self, doc_name: str) -> Optional[Dict]:
-        """Get information about a specific document"""
-        if not self.graph_data:
-            return None
-        return self.graph_data.get('documents', {}).get(doc_name)
-    
-    def get_related_documents(self, doc_name: str) -> List[str]:
-        """Get documents related to the given document"""
-        if not self.nx_graph or doc_name not in self.nx_graph:
-            return []
-        
-        related = []
-        for neighbor in self.nx_graph.neighbors(doc_name):
-            node_data = self.nx_graph.nodes[neighbor]
-            if node_data.get('type') == 'document':
-                related.append(neighbor)
-        
+            logger.error(f"Error loading knowledge graph: {e}")
+
+    def get_related_topics(self, document: str) -> List[str]:
+        """Get topics related to a document"""
+        return self.doc_topics.get(document, [])
+
+    def get_related_documents(self, topic: str) -> Set[str]:
+        """Get documents that discuss a topic"""
+        related = set()
+        if self.graph and topic in self.graph.nodes():
+            for neighbor in self.graph.neighbors(topic):
+                if self.graph.nodes[neighbor].get('type') == 'document':
+                    related.add(neighbor)
         return related
-    
-    def get_document_topics(self, doc_name: str) -> List[str]:
-        """Get topics associated with a document"""
-        doc_info = self.get_document_info(doc_name)
-        if doc_info:
-            return doc_info.get('topics', [])
-        return []
-    
-    def get_documents_by_topic(self, topic: str) -> List[str]:
-        """Find documents that discuss a specific topic"""
-        if not self.graph_data:
-            return []
-        
-        matching_docs = []
-        for doc_name, doc_info in self.graph_data.get('documents', {}).items():
-            topics = [t.lower() for t in doc_info.get('topics', [])]
-            if topic.lower() in topics:
-                matching_docs.append(doc_name)
-        
-        return matching_docs
-    
-    def search_topics(self, query: str) -> List[str]:
-        """Search for topics matching a query string"""
-        if not self.graph_data:
-            return []
-        
-        query_lower = query.lower()
-        matching_topics = set()
-        
-        for doc_info in self.graph_data.get('documents', {}).values():
-            for topic in doc_info.get('topics', []):
-                if query_lower in topic.lower():
-                    matching_topics.add(topic)
-        
-        return sorted(list(matching_topics))
-    
-    def get_statistics(self) -> Dict:
-        """Get knowledge graph statistics"""
-        if not self.graph_data:
-            return {}
-        return self.graph_data.get('statistics', {})
-    
-    def get_graph_summary(self) -> str:
-        """Get a human-readable summary of the knowledge graph"""
-        if not self.graph_data:
-            return "Knowledge graph not loaded"
-        
-        stats = self.get_statistics()
-        documents = self.get_documents()
-        
-        summary = f"""Knowledge Graph Summary:
-- Total Documents: {stats.get('total_documents', 0)}
-- Total Nodes: {stats.get('total_nodes', 0)}
-- Total Edges: {stats.get('total_edges', 0)}
 
-Documents:
-"""
-        for doc in documents:
-            doc_info = self.get_document_info(doc)
-            if doc_info:
-                summary += f"  - {doc}: {doc_info.get('word_count', 0)} words, {len(doc_info.get('topics', []))} topics\n"
-        
-        return summary
+    def expand_query(self, query: str) -> List[str]:
+        """Expand query with related topics from the graph"""
+        expanded = [query]
 
+        # Extract potential entities from query
+        words = query.lower().split()
 
-def load_knowledge_graph(graph_path: str = "knowledge_graph.json") -> Optional[KnowledgeGraphLoader]:
-    """
-    Convenience function to load the knowledge graph.
-    
-    Args:
-        graph_path: Path to the knowledge graph JSON file
-        
-    Returns:
-        KnowledgeGraphLoader instance if successful, None otherwise
-    """
-    loader = KnowledgeGraphLoader(graph_path)
-    if loader.load():
-        return loader
-    return None
+        for word in words:
+            # Look for matching topics
+            if self.graph:
+                for node in self.graph.nodes():
+                    node_label = self.graph.nodes[node].get('label', '').lower()
+                    if node_label and word in node_label and node_label not in query:
+                        expanded.append(node_label)
+
+        return expanded[:5]  # Limit to 5 expanded terms

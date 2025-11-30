@@ -7,6 +7,7 @@ without the interactive chat interface.
 
 import os
 from chatbot.rag_chatbot import RAGChatbot
+from dotenv import load_dotenv
 
 
 def main():
@@ -49,6 +50,8 @@ def main():
 
 
 if __name__ == "__main__":
+    load_dotenv()
+    
     # Check if API key is set
     if not os.getenv("OPENAI_API_KEY"):
         print("Error: OPENAI_API_KEY not found!")

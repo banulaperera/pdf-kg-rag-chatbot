@@ -213,6 +213,10 @@ __marimo__/
 # Knowledge Graph outputs
 knowledge_graph.json
 knowledge_graph_visualization.png
+knowledge_graph_degree_hist.png
+knowledge_graph_doc_topic_matrix.png
+knowledge_graph_enhanced.png
 
 # Temporary build scripts
 build_knowledge_graph.py
+.DS_Store
