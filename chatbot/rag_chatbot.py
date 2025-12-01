@@ -430,15 +430,35 @@ Answer: """.replace("{system_prompt}", system_prompt)
 
     def calculate_confidence(self, answer: str, sources: List[SourceInfo]) -> float:
         """Calculate confidence score for the answer"""
+        
         # Base confidence on number of sources
         source_confidence = min(len(sources) / 3.0, 1.0)
 
         # Reduce confidence if answer contains uncertainty phrases
-        uncertainty_phrases = ['i', ' not sure', 'unclear', 'unknown', 'uncertain', 'possibly', 'might']
-        uncertainty_score = sum(1 for phrase in uncertainty_phrases if phrase.lower() in answer.lower())
-
-        confidence = source_confidence * (1.0 - min(uncertainty_score * 0.1, 0.5))
-        return max(0.0, min(confidence, 1.0))
+        uncertainty_phrases = [
+            'not sure', 
+            'unclear', 
+            'unknown', 
+            'uncertain', 
+            'possibly', 
+            'might be',
+            'cannot find',
+            'no information',
+            'don\'t know',
+            'not mentioned'
+        ]
+        
+        answer_lower = answer.lower()
+        uncertainty_count = sum(1 for phrase in uncertainty_phrases if phrase in answer_lower)
+        
+        # Calculate confidence (don't penalize too heavily)
+        confidence = source_confidence * (1.0 - min(uncertainty_count * 0.15, 0.6))
+        
+        # Boost confidence if answer is detailed (longer answers with sources)
+        if len(answer) > 200 and len(sources) > 0:
+            confidence = min(confidence * 1.1, 1.0)
+        
+        return max(0.3, min(confidence, 1.0))  # Ensure minimum 30% confidence
 
     def generate_follow_up_questions(self, question: str, answer: str) -> List[str]:
         """Generate relevant follow-up questions"""

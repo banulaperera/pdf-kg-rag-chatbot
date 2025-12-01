@@ -290,6 +290,11 @@ def save_knowledge_graph(G, document_data, output_file='knowledge_graph.json'):
 
 def visualize_knowledge_graph(G, output_file='knowledge_graph_visualization.png', max_nodes=50):
     """Create visualization of the knowledge graph"""
+
+    output_dir = Path('Generated_knowledge_Graphs_visualizations')
+    output_dir.mkdir(exist_ok=True)
+    output_path = output_dir / output_file
+
     plt.figure(figsize=(24, 20))
 
     # Filter nodes for better visualization
@@ -331,9 +336,9 @@ def visualize_knowledge_graph(G, output_file='knowledge_graph_visualization.png'
     plt.legend(scatterpoints=1, loc='upper left', fontsize=14, framealpha=0.9)
     plt.axis('off')
     plt.tight_layout()
-    plt.savefig(output_file, dpi=150, bbox_inches='tight',
+    plt.savefig(output_path, dpi=150, bbox_inches='tight',
                facecolor='white', edgecolor='none')
-    print(f"✅ Visualization saved to {output_file}")
+    print(f"✅ Visualization saved to {output_path}")
     plt.close()
 
 def visualize_knowledge_graph_enhanced(
@@ -346,6 +351,9 @@ def visualize_knowledge_graph_enhanced(
     if not HAS_DEPS:
         print("Visualization skipped (missing deps)")
         return
+    
+    output_dir = Path('Generated_knowledge_Graphs_visualizations')
+    output_dir.mkdir(exist_ok=True)
 
     # Derive subsets
     doc_nodes = [n for n,d in G.nodes(data=True) if d.get('type') == 'document']
@@ -464,7 +472,7 @@ def visualize_knowledge_graph_enhanced(
     plt.title("Enhanced PDF Knowledge Graph", fontsize=28, fontweight='bold', pad=24)
     plt.axis('off')
     plt.tight_layout()
-    out_file_main = f"{output_prefix}_enhanced.png"
+    out_file_main = output_dir / f"{output_prefix}_enhanced.png"
     plt.savefig(out_file_main, dpi=170, bbox_inches='tight', facecolor='white')
     plt.close()
     print(f"✅ Enhanced visualization saved: {out_file_main}")
@@ -491,7 +499,7 @@ def visualize_knowledge_graph_enhanced(
         plt.xticks(range(len(topics)), [G.nodes[t].get('label', t)[:14] for t in topics], rotation=90, fontsize=9)
         plt.title("Document–Topic Matrix", fontsize=20, pad=16)
         plt.tight_layout()
-        out_file_matrix = f"{output_prefix}_doc_topic_matrix.png"
+        out_file_matrix = output_dir / f"{output_prefix}_doc_topic_matrix.png"
         plt.savefig(out_file_matrix, dpi=160, bbox_inches='tight')
         plt.close()
         print(f"✅ Matrix visualization saved: {out_file_matrix}")
@@ -506,7 +514,7 @@ def visualize_knowledge_graph_enhanced(
         plt.xlabel("Degree")
         plt.ylabel("Count")
         plt.grid(alpha=0.25)
-        out_file_deg = f"{output_prefix}_degree_hist.png"
+        out_file_deg = output_dir / f"{output_prefix}_degree_hist.png"
         plt.tight_layout()
         plt.savefig(out_file_deg, dpi=140)
         plt.close()
@@ -569,10 +577,10 @@ def main():
     print("\nGenerated files:")
     print("  - knowledge_graph.json")
     if HAS_DEPS:
-        print("  - knowledge_graph_visualization.png")
-        print("  - knowledge_graph_enhanced.png")
-        print("  - knowledge_graph_doc_topic_matrix.png")
-        print("  - knowledge_graph_degree_hist.png")
+        print("  - Generated_knowledge_Graphs_visualizations/knowledge_graph_visualization.png")
+        print("  - Generated_knowledge_Graphs_visualizations/knowledge_graph_enhanced.png")
+        print("  - Generated_knowledge_Graphs_visualizations/knowledge_graph_doc_topic_matrix.png")
+        print("  - Generated_knowledge_Graphs_visualizations/knowledge_graph_degree_hist.png")
 
     return 0
 
